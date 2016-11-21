@@ -1,0 +1,447 @@
+#!/bin/bash
+
+# See where we are
+DC_CMD="$1"
+DC_PROJ="$2"
+DC_ENV="$3"
+DC_ARG="$4"
+
+DC_DIR=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+DC_PROJ_DIR="/data/projects"
+DC_PORT_FILE="${DC_DIR}/dc.port"
+
+DC_DOMAIN="devbox21.com"
+DC_ENVIRONMENTS=("dev" "stage" "prod")
+DC_DOCKER_PORT=$(<"${DC_PORT_FILE}")
+
+DC_PHP="5.6"
+DC_DRUPAL="7"
+
+###
+# Helper functions
+###
+
+# Shortcut for code readability
+function dcp() {
+  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} $@
+}
+
+# Initialize the system
+function dc_init() {
+  echo "Initializing -- NOT IMPLEMENTED YET."
+}
+
+# Make project home directory
+function dc_make() {
+  if [ $DC_CMD == "make8" -o $DC_CMD == "m8" ]; then
+    DC_DRUPAL="8"
+  fi
+  # Create directories in environments
+  for key in "${DC_ENVIRONMENTS[@]}" ; do
+    mkdir -p ${DC_PROJ_DIR}/${DC_PROJ}/$key/databases
+    mkdir -p ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime
+    cp -a ${DC_DIR}/metro ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime/
+    cp -a ${DC_DIR}/drush ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime/
+    sed \
+      -e "s/__DC_PORT__/${DC_DOCKER_PORT}/g" \
+      -e "s/__DC_PHP__/${DC_PHP}/g" \
+      -e "s/__DC_DRUPAL__/${DC_DRUPAL}/g" \
+      ${DC_DIR}/templates/drupal.tpl.dc \
+      > ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-compose.yml
+    #echo "docker-compose.yml file created."
+    ((DC_DOCKER_PORT++))
+  done
+
+  # Write port for next project
+  echo ${DC_DOCKER_PORT} > "${DC_PORT_FILE}"
+
+  # Fix ownership for dc friendly
+  chown -R docker:docker ${DC_PROJ_DIR}/${DC_PROJ}
+
+  # Report on created dockers
+  echo "
+Directories for project: ${DC_PROJ} created.
+
+You can access your new project at:
+Dev:   http://${DC_DOMAIN}:$((${DC_DOCKER_PORT}-3))0
+Stage: http://${DC_DOMAIN}:$((${DC_DOCKER_PORT}-2))0
+Prod:  http://${DC_DOMAIN}:$((${DC_DOCKER_PORT}-1))0
+
+You must start container before adding Drupal to it, use
+$ dc start ${DC_PROJ} dev
+You can now add fresh drupal or pull from repository.
+$ dc drupal-7 ${DC_PROJ} dev
+$ dc git-clone ${DC_PROJ} dev
+Probably, if you used clone, you'll need mysql import, but
+keep in mind that SQL dump should be in ${DC_PROJ}/dev/databases/mysqldump.sql
+$ dc mysql-import ${DC_PROJ} mysqldump.sql
+"
+}
+
+# Run drush in project in environment
+function dc_drush() {
+  echo "Running drush for ${DC_PROJ} in ${DC_ENV}"
+  # remove command project and environment to get rest of drush commands and arguments
+  shift
+  shift
+  shift
+  dcp exec --user 82 php drush @default.dev $@
+}
+
+# Create drupal-7 or drupal-8 in project in environment
+function dc_drupal() {
+  echo "Installing ${DC_CMD} for ${DC_PROJ} in ${DC_ENV}"
+  dcp exec --user 82 php drush dl $DC_CMD --drupal-project-rename=docroot
+  echo "
+Drupal code is in 'docroot'.
+
+Use following credentials to install:
+db_name: drupal
+db_user: drupal
+db_pass: drupal
+db_host: mariadb
+"
+}
+
+# Start project docker in environment
+function dc_start() {
+  echo "Starting containers for ${DC_PROJ} in ${DC_ENV}"
+  dcp up -d
+}
+
+# Restart project docker in environment
+function dc_restart() {
+  echo "Restarting containers for ${DC_PROJ} in ${DC_ENV}"
+  dcp restart
+}
+
+# Status project docker in environment
+function dc_status() {
+  if [ "$DC_PROJ" == "--all" ] || [ "$DC_PROJ" == "-a" ] || [ -z "$DC_PROJ" ]; then
+    echo "Status of all containers on system:
+"
+    docker ps -a
+  else
+    echo "Status of the project ${DC_PROJ} in ${DC_ENV}:
+"
+    dcp ps
+  fi
+}
+
+# Kill project docker in environment
+function dc_kill() {
+  echo "Killing containers for ${DC_PROJ} in ${DC_ENV}"
+  dcp down
+}
+
+# List project docker in environment
+function dc_list() {
+  DC_ALL_PROJ=$(ls -1 ${DC_PROJ_DIR})
+  echo "
+All projects on system (each containing own environments):
+
+${DC_ALL_PROJ}
+
+"
+}
+
+# git clone code from repository
+function dc_git_clone() {
+  echo "Pulling from ${DC_ARG} for ${DC_PROJ} in ${DC_ENV}"
+  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV} ; git clone ${DC_ARG} docroot"
+}
+
+# git checkout branch
+function dc_git_checkout() {
+  echo "Change branch to ${DC_ARG} for ${DC_PROJ} in ${DC_ENV}"
+  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git checkout ${DC_ARG}"
+}
+
+# git show all branches
+function dc_git_branch_all() {
+  echo "All branches for ${DC_PROJ} in ${DC_ENV}"
+  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git branch --all"
+}
+
+# git pull latest code
+function dc_git_pull() {
+  echo "Pull latest code for ${DC_PROJ} in ${DC_ENV}"
+  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git pull"
+}
+
+# git show remote status
+function dc_git_status() {
+  echo "Show status of remote repository for ${DC_PROJ} in ${DC_ENV}"
+  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git remote show origin"
+}
+
+# Archive project docker in environment
+function dc_archive() {
+  echo "Archive -- NOT IMPLEMENTED YET."
+}
+
+# Delete project home directory
+function dc_delete() {
+  # Brutally delte strucutre
+  rm -rf ${DC_PROJ_DIR}/${DC_PROJ}
+
+  echo "Directory structure for project ${DC_PROJ} removed."
+}
+
+# Just for testing
+function dc_test() {
+    echo "Testing:"
+    check_php_run
+}
+
+###
+# Checks
+###
+
+# Check project php container running
+function check_php_run() {
+  DC_PHP_RUNNING=$(docker inspect -f {{.State.Status}} ${DC_PROJ}${DC_ENV}_php_1)
+  if [ ! "$?" == 0 ]; then
+    DC_PHP_RUNNING=FALSE
+  fi
+  if [ ! ${DC_PHP_RUNNING} == "running" ]; then
+    echo "
+We need a running PHP container to get Drupal code, please start it.
+
+Coomand:
+dc start ${DC_PROJ} ${DC_ENV}
+"
+    exit 1
+  fi
+}
+
+# Check project name argument
+function check_repo() {
+  if [ -z "$DC_ARG" ] ; then
+    echo "
+We need a project repo to clone from, please supply one.
+
+Command:
+dc git-clone ${DC_PROJ} ${DC_ENV} git@bitbucket.org:user/project.git
+"
+    exit 1
+  fi
+}
+
+# Check project name argument
+function check_proj() {
+  if [ -z "$DC_PROJ" ] ; then
+    echo "
+We need a project name to work on, please supply one.
+
+Usage:
+  dc command project dev|stage|prod
+"
+    exit 1
+  fi
+}
+
+# Check project environment argument
+function check_env() {
+  if [ -z "$DC_ENV" ] ; then
+    echo "
+We need a project environment (dev, stage, prod) to work on, please supply one.
+
+Usage:
+  dc command project dev|stage|prod
+"
+    exit 1
+  fi
+}
+
+###
+# Main loop
+###
+
+case $DC_CMD in
+    i|init)
+        dc_init
+        ;;
+    m|m8|make|make8)
+        check_proj
+        dc_make
+        ;;
+    d7|d8|drupal-7|drupal-8)
+        check_proj
+        check_env
+        check_php_run
+        dc_drupal
+        ;;
+    dr|drush)
+        check_proj
+        check_env
+        dc_drush
+        ;;
+    s|start)
+        check_proj
+        check_env
+        dc_start
+        ;;
+    r|restart)
+        check_proj
+        check_env
+        dc_restart
+        ;;
+    st|status)
+        dc_status
+        ;;
+    l|list)
+        dc_list
+        ;;
+    k|kill)
+        check_proj
+        check_env
+        dc_kill
+        ;;
+    gc|git-clone)
+        check_proj
+        check_env
+        check_repo
+        dc_git_clone
+        ;;
+    gco|git-checkout)
+        check_proj
+        check_env
+        dc_git_checkout
+        ;;
+    gba|git-branch-all)
+        check_proj
+        check_env
+        dc_git_branch_all
+        ;;
+    gp|git-pull)
+        check_proj
+        check_env
+        dc_git_pull
+        ;;
+    gst|git-status)
+        check_proj
+        check_env
+        dc_git_status
+        ;;
+    a|archive)
+        check_proj
+        dc_archive
+        ;;
+    d|delete)
+        check_proj
+        dc_delete
+        ;;
+    t|test)
+        dc_test
+        ;;
+    *)
+        echo "
+DC version 1.0
+(C) 2016 MacMladen @macmladen
+
+Usage:
+  dc command [project environment argument]
+
+Commands:
+
+System
+======
+  i, init
+    Init the environment with all needed components, no need to use on this system.
+    $ dc init
+
+  m, make
+  m8, make8
+    Make the project by building directory structure and docker-compose.yml for three environments, dev, stage and prod.
+    $ dc make myproj drupal7
+    $ dc make8 myproj drupal8
+    $ dc makew myproj wordpress
+
+  l, list
+    List all projects.
+    $ dc list
+
+  a, archive
+    Archive project, remove from active tree.
+    $ dc archive myproj
+
+  d, delete
+    delete whole project structure
+    $ dc delete myproj
+
+Drupal
+======
+  d7, drupal-7
+  d8, drupal-8
+    Install fresh drupal in project for environment.
+    $ dc drupal-7 myproj dev
+    $ dc drupal-8 myproj8 dev
+
+  dr, drush
+    Execute drush commands on project in environment.
+    $ dc drush myproj dl views
+    By design, it cannot handle multiple arguments after drush command.
+    If you need that, 'cd' to project directory and use 'drc' command.
+
+Docker
+======
+  s, start
+    Start project containers for environment.
+    $ dc start myproj dev
+
+  r, restart
+    Restart project containers for environment.
+    $ dc restart myproj prod
+
+  k, kill
+    Kill project containers for environment.
+    $ dc kill myproj stage
+
+  st, status
+    Gives status of the project containers for environment or all containers.
+    $ dc status
+    $ dc status myproj
+
+Git
+===
+  gc, git-clone
+    git clone repository in project for environment.
+    $ dc git-clone myproj dev git@bitbucket.org:user/project.git
+
+  gco, git-checkout
+    git checkout branch in project for environment.
+    $ dc git-checkout myproj dev master
+
+  gba, git-branch-all
+    git show all branches in project for environment.
+    $ dc git-branch-all myproj dev
+
+  gp, git-pull
+    git pull latest code in project for environment.
+    $ dc git-pull myproj dev
+
+  gst, git-status
+    git status of remote repository in project for environment.
+    $ dc git-status myproj dev
+
+MySQL
+=====
+  dbl, db-list
+    List all available databases in project.
+    $ dc db-list
+
+  dbi, db-import
+    Import database in project for environment.
+    $ dc db_import myproj dev myprojdump_20161118-0941.sql
+
+  dbe, db-export
+    Export database from project in environment to databases directory.
+    $ dc db-export myproj dev
+
+Have a wish, suggestion?
+Mail me macmladen@gmail.com
+Carpe diem.
+"
+        ;;
+esac
