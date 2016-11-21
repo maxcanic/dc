@@ -18,6 +18,7 @@ DC_DOCKER_PORT=$(<"${DC_PORT_FILE}")
 DC_PHP="5.6"
 DC_DRUPAL="7"
 
+
 ###
 # Helper functions
 ###
@@ -27,18 +28,19 @@ function dcp() {
   docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} "$@"
 }
 
+
 ###
 # System functions
 ###
 
 # Initialize the system
 function dc_init() {
-  echo "Initializing -- NOT IMPLEMENTED YET."
+  echo "Initializing, basically setting up /data/* directory structure -- NOT IMPLEMENTED YET."
 }
 
 # Make project home directory
 function dc_make() {
-  if [ $DC_CMD == "make8" -o $DC_CMD == "m8" ]; then
+  if [ $DC_CMD == "make8" ] || [ $DC_CMD == "m8" ]; then
     DC_DRUPAL="8"
   fi
   # Create directories in environments
@@ -85,7 +87,7 @@ $ dc mysql-import ${DC_PROJ} mysqldump.sql
 
 # Archive project docker in environment
 function dc_archive() {
-  echo "Archiving the project: ${DC_PROJ} -- NOT IMPLEMENTED YET."
+  echo "Archiving the project: ${DC_PROJ}"
   mv ${DC_PROJ_DIR}/${DC_PROJ} /data/archive/${DC_PROJ}
 }
 
@@ -96,7 +98,7 @@ function dc_delete() {
   echo -e "This is going to WIPE OUT project and their DEV/STAGE/PROD irrevocably!"
   echo -e "Did you make a copy?"
   echo -e "Did you archive and compressed it?"
-  read -r -p "Are you ABOSLUTELY sure you want to wipe ${DC_PROJ} out?" response
+  read -r -p "Are you ABOSLUTELY sure you want to wipe ${DC_PROJ} out? [y/n]" response
   case $response in
     [yY][eE][sS]|[yY]) 
         do_something
@@ -117,7 +119,8 @@ function dc_delete() {
 # Run drush in project in environment
 function dc_drush() {
   echo "Running drush for ${DC_PROJ} in ${DC_ENV}"
-  # user 82 is www-data in php container
+  # user 82 is www-data in php container and docker in our system
+  dcp exec --user 82 php drush @default.dev $@
 }
 
 # Create drupal-7 or drupal-8 in project in environment
@@ -135,13 +138,14 @@ function dc_drupal() {
   echo "
 Drupal code is in 'docroot'.
 
-Use following credentials to install:
+Use following credentials for database connection:
 db_name: drupal
 db_user: drupal
 db_pass: drupal
 db_host: mariadb
 "
 }
+
 
 ###
 # Docker functions
@@ -188,6 +192,7 @@ ${DC_ALL_PROJ}
 
 "
 }
+
 
 ###
 # Git functions
@@ -324,6 +329,7 @@ Usage:
   fi
 }
 
+
 ###
 # Main loop
 ###
@@ -337,7 +343,7 @@ case $DC_CMD in
         check_proj
         dc_make
         ;;
-   a|archive)
+    a|archive)
         check_proj
         dc_archive
         ;;
@@ -384,7 +390,7 @@ case $DC_CMD in
         dc_kill
         ;;
 # Git commnads
-   gc|git-clone)
+    gc|git-clone)
         check_proj
         check_env
         check_repo
@@ -596,4 +602,3 @@ Carpe diem.
 "
         ;;
 esac
-
