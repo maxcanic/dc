@@ -24,7 +24,7 @@ DC_DRUPAL="7"
 
 # Shortcut for code readability
 function dcp() {
-  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} $@
+  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} "$@"
 }
 
 ###
@@ -85,15 +85,28 @@ $ dc mysql-import ${DC_PROJ} mysqldump.sql
 
 # Archive project docker in environment
 function dc_archive() {
-  echo "Archive -- NOT IMPLEMENTED YET."
+  echo "Archiving the project: ${DC_PROJ} -- NOT IMPLEMENTED YET."
+  mv ${DC_PROJ_DIR}/${DC_PROJ} /data/archive/${DC_PROJ}
 }
 
 # Delete project home directory
 function dc_delete() {
   # Brutally delte strucutre
-  rm -rf ${DC_PROJ_DIR:?}/${DC_PROJ}
-
-  echo "Directory structure for project ${DC_PROJ} removed."
+  echo -e "WARNING !!!"
+  echo -e "This is going to WIPE OUT project and their DEV/STAGE/PROD irrevocably!"
+  echo -e "Did you make a copy?"
+  echo -e "Did you archive and compressed it?"
+  read -r -p "Are you ABOSLUTELY sure you want to wipe ${DC_PROJ} out?" response
+  case $response in
+    [yY][eE][sS]|[yY]) 
+        do_something
+        rm -rf ${DC_PROJ_DIR:?}/${DC_PROJ}
+        echo "Directory structure for project ${DC_PROJ} removed."
+        ;;
+    *)
+        echo -e "You gave up. Nothing happened. Well, we're kool, right?"
+        ;;
+  esac
 }
 
 
@@ -104,24 +117,19 @@ function dc_delete() {
 # Run drush in project in environment
 function dc_drush() {
   echo "Running drush for ${DC_PROJ} in ${DC_ENV}"
-  # remove command project and environment to get rest of drush commands and arguments
-  shift
-  shift
-  shift
   # user 82 is www-data in php container
-  dcp exec --user 82 php drush @default.dev $@
 }
 
 # Create drupal-7 or drupal-8 in project in environment
 function dc_drupal() {
-case ${DC_CMD} in
-    d7)
-        DC_CMD="drupal-7"
-        ;;
-    d8)
-        DC_CMD="drupal-8"
-        ;;
-esac
+  case ${DC_CMD} in
+      d7)
+          DC_CMD="drupal-7"
+          ;;
+      d8)
+          DC_CMD="drupal-8"
+          ;;
+  esac
   echo "Installing ${DC_CMD} for ${DC_PROJ} in ${DC_ENV}"
   dcp exec --user 82 php drush dl $DC_CMD --drupal-project-rename=docroot
   echo "
@@ -240,14 +248,19 @@ ${DC_ALL_DB}
 # MySQL Import database in the project for env
 function dc_db_import() {
   echo "Import database ${DC_ARG} in ${DC_PROJ} for ${DC_ENV}"
-  echo dcp exec mariadb mysql -udrupal -pdrupal drupal < ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/databases/${DC_ARG}
-
+  #   This does not work because variable expansion eats double quotes
+  # DC_SQL="\"mysql -udrupal -pdrupal drupal < /var/lib/mysql/databases/${DC_ARG}\""
+  # dcp exec mariadb sh -c "${DC_SQL}"
+  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh -c "mysql -udrupal -pdrupal drupal < /var/lib/mysql/databases/${DC_ARG}"
 }
 
 # MySQL export database for the project in env
 function dc_db_export() {
-  echo "Export database ${DC_ARG} in ${DC_PROJ} for ${DC_ENV}"
-  echo dcp exec mariadb mysqldump -udrupal -pdrupal drupal > ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/databases/${DC_ARG}
+  DC_DATE=$(date +%Y-%m-%d-%H%M)
+  echo "Export database ${DC_PROJ}_${DC_DATE}.sql in ${DC_PROJ} for ${DC_ENV}"
+  #   This does not work because variable expansion eats double quotes
+  # dcp exec mariadb sh -c \"mysqldump -udrupal -pdrupal drupal > /var/lib/mysql/databases/${DC_PROJ}_${DC_DATE}.sql\"
+  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh -c "mysqldump -udrupal -pdrupal drupal > /var/lib/mysql/databases/${DC_PROJ}_${DC_DATE}.sql"
 }
 
 
@@ -342,7 +355,11 @@ case $DC_CMD in
     dr|drush)
         check_proj
         check_env
-        dc_drush
+        # remove command project and environment to get rest of drush commands and arguments
+        shift
+        shift
+        shift
+        dc_drush "$*"
         ;;
 # Docker commands
     s|start)
@@ -579,3 +596,4 @@ Carpe diem.
 "
         ;;
 esac
+
