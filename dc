@@ -5,6 +5,7 @@ DC_CMD="$1"
 DC_PROJ="$2"
 DC_ENV="$3"
 DC_ARG="$4"
+DC_ALL_ARG="$@"
 
 DC_DIR=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 DC_PROJ_DIR="/data/projects"
@@ -25,6 +26,10 @@ DC_DRUPAL="7"
 function dcp() {
   docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} $@
 }
+
+###
+# System functions
+###
 
 # Initialize the system
 function dc_init() {
@@ -63,9 +68,9 @@ function dc_make() {
 Directories for project: ${DC_PROJ} created.
 
 You can access your new project at:
-Dev:   http://${DC_DOMAIN}:$((${DC_DOCKER_PORT}-3))0
-Stage: http://${DC_DOMAIN}:$((${DC_DOCKER_PORT}-2))0
-Prod:  http://${DC_DOMAIN}:$((${DC_DOCKER_PORT}-1))0
+Dev:   http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))0
+Stage: http://${DC_DOMAIN}:$((DC_DOCKER_PORT-2))0
+Prod:  http://${DC_DOMAIN}:$((DC_DOCKER_PORT-1))0
 
 You must start container before adding Drupal to it, use
 $ dc start ${DC_PROJ} dev
@@ -78,6 +83,24 @@ $ dc mysql-import ${DC_PROJ} mysqldump.sql
 "
 }
 
+# Archive project docker in environment
+function dc_archive() {
+  echo "Archive -- NOT IMPLEMENTED YET."
+}
+
+# Delete project home directory
+function dc_delete() {
+  # Brutally delte strucutre
+  rm -rf ${DC_PROJ_DIR:?}/${DC_PROJ}
+
+  echo "Directory structure for project ${DC_PROJ} removed."
+}
+
+
+###
+# Drupal functions
+###
+
 # Run drush in project in environment
 function dc_drush() {
   echo "Running drush for ${DC_PROJ} in ${DC_ENV}"
@@ -85,11 +108,20 @@ function dc_drush() {
   shift
   shift
   shift
+  # user 82 is www-data in php container
   dcp exec --user 82 php drush @default.dev $@
 }
 
 # Create drupal-7 or drupal-8 in project in environment
 function dc_drupal() {
+case ${DC_CMD} in
+    d7)
+        DC_CMD="drupal-7"
+        ;;
+    d8)
+        DC_CMD="drupal-8"
+        ;;
+esac
   echo "Installing ${DC_CMD} for ${DC_PROJ} in ${DC_ENV}"
   dcp exec --user 82 php drush dl $DC_CMD --drupal-project-rename=docroot
   echo "
@@ -102,6 +134,10 @@ db_pass: drupal
 db_host: mariadb
 "
 }
+
+###
+# Docker functions
+###
 
 # Start project docker in environment
 function dc_start() {
@@ -145,6 +181,10 @@ ${DC_ALL_PROJ}
 "
 }
 
+###
+# Git functions
+###
+
 # git clone code from repository
 function dc_git_clone() {
   echo "Pulling from ${DC_ARG} for ${DC_PROJ} in ${DC_ENV}"
@@ -175,24 +215,41 @@ function dc_git_status() {
   sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git remote show origin"
 }
 
-# Archive project docker in environment
-function dc_archive() {
-  echo "Archive -- NOT IMPLEMENTED YET."
-}
-
-# Delete project home directory
-function dc_delete() {
-  # Brutally delte strucutre
-  rm -rf ${DC_PROJ_DIR}/${DC_PROJ}
-
-  echo "Directory structure for project ${DC_PROJ} removed."
-}
-
 # Just for testing
 function dc_test() {
     echo "Testing:"
     check_php_run
 }
+
+
+###
+# MySQL functions
+###
+
+# MySQL List all databases for the project in env
+function dc_db_list() {
+  DC_ALL_DB=$(ls -1 ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/databases)
+  echo "
+All databases available for ${DC_PROJ} in ${DC_ENV}:
+
+${DC_ALL_DB}
+
+"
+}
+
+# MySQL Import database in the project for env
+function dc_db_import() {
+  echo "Import database ${DC_ARG} in ${DC_PROJ} for ${DC_ENV}"
+  echo dcp exec mariadb mysql -udrupal -pdrupal drupal < ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/databases/${DC_ARG}
+
+}
+
+# MySQL export database for the project in env
+function dc_db_export() {
+  echo "Export database ${DC_ARG} in ${DC_PROJ} for ${DC_ENV}"
+  echo dcp exec mariadb mysqldump -udrupal -pdrupal drupal > ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/databases/${DC_ARG}
+}
+
 
 ###
 # Checks
@@ -215,7 +272,7 @@ dc start ${DC_PROJ} ${DC_ENV}
   fi
 }
 
-# Check project name argument
+# Check project repo argument
 function check_repo() {
   if [ -z "$DC_ARG" ] ; then
     echo "
@@ -259,6 +316,7 @@ Usage:
 ###
 
 case $DC_CMD in
+# System commands
     i|init)
         dc_init
         ;;
@@ -266,6 +324,15 @@ case $DC_CMD in
         check_proj
         dc_make
         ;;
+   a|archive)
+        check_proj
+        dc_archive
+        ;;
+    d|delete)
+        check_proj
+        dc_delete
+        ;;
+# Drupal commands
     d7|d8|drupal-7|drupal-8)
         check_proj
         check_env
@@ -277,6 +344,7 @@ case $DC_CMD in
         check_env
         dc_drush
         ;;
+# Docker commands
     s|start)
         check_proj
         check_env
@@ -298,7 +366,8 @@ case $DC_CMD in
         check_env
         dc_kill
         ;;
-    gc|git-clone)
+# Git commnads
+   gc|git-clone)
         check_proj
         check_env
         check_repo
@@ -324,24 +393,34 @@ case $DC_CMD in
         check_env
         dc_git_status
         ;;
-    a|archive)
+# MySQL
+    dbl|db-list)
         check_proj
-        dc_archive
+        check_env
+        dc_db_list
         ;;
-    d|delete)
+    dbi|db-import)
         check_proj
-        dc_delete
+        check_env
+        dc_db_import
         ;;
+    dbe|db-export)
+        check_proj
+        check_env
+        dc_db_export
+        ;;
+# Testing new things ;)
     t|test)
         dc_test
         ;;
-    *)
+# Help detailed
+    -h|h|help)
         echo "
 DC version 1.0
 (C) 2016 MacMladen @macmladen
 
 Usage:
-  dc command [project environment argument]
+  dc command [project environment arguments]
 
 Commands:
 
@@ -438,6 +517,61 @@ MySQL
   dbe, db-export
     Export database from project in environment to databases directory.
     $ dc db-export myproj dev
+
+Have a wish, suggestion?
+Mail me macmladen@gmail.com
+Carpe diem.
+"
+        ;;
+# Help brief
+    *)
+        echo "
+DC version 1.0
+(C) 2016 MacMladen @macmladen
+
+Usage:
+  dc command [project environment arguments]
+
+For detailed help with exaple commands, please use
+  dc help command
+
+Commands:
+
+System
+======
+  i, init     Init the environment with all needed components, no need to use on this system.
+  m, make
+  m8, make8   Make the project by building directory structure and docker-compose.yml for three environments, dev, stage and prod.
+  l, list     List all projects.
+  a, archive  Archive project, remove from active tree.
+  d, delete   Delete whole project structure
+
+Drupal
+======
+  d7, drupal-7
+  d8, drupal-8  Install fresh drupal in project for environment.
+  dr, drush     Execute drush commands on project in environment.
+
+Docker
+======
+  s, start    Start project containers for environment.
+  r, restart  Restart project containers for environment.
+  k, kill     Kill project containers for environment.
+  st, status  Gives status of the project containers for environment or all containers.
+
+Git
+===
+  gc, git-clone        git clone repository in project for environment.
+  gco, git-checkout    git checkout branch in project for environment.
+  gba, git-branch-all  git show all branches in project for environment.
+  gp, git-pull         git pull latest code in project for environment.
+  gst, git-status      git status of remote repository in project for environment.
+
+MySQL
+=====
+  dbl, db-list    List all available databases in project.
+  dbi, db-import  Import database in project for environment.
+  dbe, db-export  Export database from project in environment to databases directory.
 
 Have a wish, suggestion?
 Mail me macmladen@gmail.com
