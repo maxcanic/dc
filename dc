@@ -101,7 +101,6 @@ function dc_delete() {
   read -r -p "Are you ABOSLUTELY sure you want to wipe ${DC_PROJ} out? [y/n]" response
   case $response in
     [yY][eE][sS]|[yY]) 
-        do_something
         rm -rf ${DC_PROJ_DIR:?}/${DC_PROJ}
         echo "Directory structure for project ${DC_PROJ} removed."
         ;;
