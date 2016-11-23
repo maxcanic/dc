@@ -163,7 +163,14 @@ function dc_restart() {
 }
 
 # Status project docker in environment
-function dc_status() {
+function dc_stats() {
+    echo "Status of all containers on system:
+"
+    docker ps -a
+}
+
+# Status project docker in environment
+function dc_process() {
   if [ "$DC_PROJ" == "--all" ] || [ "$DC_PROJ" == "-a" ] || [ -z "$DC_PROJ" ]; then
     echo "Status of all containers on system:
 "
@@ -388,8 +395,11 @@ case $DC_CMD in
         check_env
         dc_restart
         ;;
-    st|status)
-        dc_status
+    st|stats)
+        dc_stats
+        ;;
+    ps|process)
+        dc_process
         ;;
     l|list)
         dc_list
@@ -515,10 +525,14 @@ Docker
     Kill project containers for environment.
     $ dc kill myproj stage
 
-  st, status
+  ps, process
     Gives status of the project containers for environment or all containers.
-    $ dc status
-    $ dc status myproj
+    $ dc process
+    $ dc process myproj
+
+  st, stats
+    Gives statistics of all running containers.
+    $ dc stats
 
 Git
 ===
@@ -596,10 +610,11 @@ Drupal
 
 Docker
 ======
-  s, start    Start project containers for environment.
-  r, restart  Restart project containers for environment.
-  k, kill     Kill project containers for environment.
-  st, status  Gives status of the project containers for environment or all containers.
+  s, start     Start project containers for environment.
+  r, restart   Restart project containers for environment.
+  k, kill      Kill project containers for environment.
+  ps, process  Gives status of the project containers for environment or all containers.
+  st, status   Gives statistics of all containers.
 
 Git
 ===
