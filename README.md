@@ -5,7 +5,8 @@
 Future plans will include a rewrite in `nodejs` and web GUI with local terminal CLI.
 
 Usage:
-  dc command [project environment arguments]
+
+    dc command [project environment arguments]
 
 # Commands:
 
@@ -177,4 +178,4 @@ $ dc db-export myproj dev
 
 Have a wish, suggestion? Mail me macmladen@gmail.com
 
-Carpe diem.
+_**Carpe diem.**_

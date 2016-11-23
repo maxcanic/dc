@@ -200,31 +200,36 @@ ${DC_ALL_PROJ}
 # git clone code from repository
 function dc_git_clone() {
   echo "Pulling from ${DC_ARG} for ${DC_PROJ} in ${DC_ENV}"
-  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV} ; git clone ${DC_ARG} docroot"
+  cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}
+  git clone ${DC_ARG} docroot
 }
 
 # git checkout branch
 function dc_git_checkout() {
   echo "Change branch to ${DC_ARG} for ${DC_PROJ} in ${DC_ENV}"
-  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git checkout ${DC_ARG}"
+  cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot
+  git checkout ${DC_ARG}
 }
 
 # git show all branches
 function dc_git_branch_all() {
   echo "All branches for ${DC_PROJ} in ${DC_ENV}"
-  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git branch --all"
+  cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot
+  git branch --all
 }
 
 # git pull latest code
 function dc_git_pull() {
   echo "Pull latest code for ${DC_PROJ} in ${DC_ENV}"
-  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git pull"
+  cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot
+  git pull
 }
 
 # git show remote status
 function dc_git_status() {
   echo "Show status of remote repository for ${DC_PROJ} in ${DC_ENV}"
-  sudo -u docker bash -c "cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot ; git remote show origin"
+  cd ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot
+  git remote show origin
 }
 
 # Just for testing
