@@ -272,6 +272,12 @@ function dc_db_export() {
   docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh -c "mysqldump -udrupal -pdrupal drupal > /var/lib/mysql/databases/${DC_PROJ}_${DC_DATE}.sql"
 }
 
+# MySQL exec shell for the project in env
+function dc_db_shell() {
+  echo "Entering shell for ${DC_PROJ}_${DC_DATE}.sql in container ${DC_PROJ} for ${DC_ENV}"
+  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh
+}
+
 
 ###
 # Checks
@@ -436,6 +442,11 @@ case $DC_CMD in
         check_env
         dc_db_export
         ;;
+    dbs|db-shell)
+        check_proj
+        check_env
+        dc_db_shell
+        ;;
 # Testing new things ;)
     t|test)
         dc_test
@@ -545,6 +556,10 @@ MySQL
     Export database from project in environment to databases directory.
     $ dc db-export myproj dev
 
+  dbs, db-shell
+    Enter shell in database container for project in environment.
+    $ dc db-shell myproj dev
+
 Have a wish, suggestion?
 Mail me macmladen@gmail.com
 Carpe diem.
@@ -599,6 +614,7 @@ MySQL
   dbl, db-list    List all available databases in project.
   dbi, db-import  Import database in project for environment.
   dbe, db-export  Export database from project in environment to databases directory.
+  dbs, db-shell   Enter shell in database container for project in environment.
 
 Have a wish, suggestion?
 Mail me macmladen@gmail.com
