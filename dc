@@ -166,7 +166,7 @@ function dc_restart() {
 function dc_stats() {
     echo "Status of all containers on system:
 "
-    docker ps -a
+    docker stats -a
 }
 
 # Status project docker in environment
