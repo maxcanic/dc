@@ -75,10 +75,12 @@ Stage: http://${DC_DOMAIN}:$((DC_DOCKER_PORT-2))0
 Prod:  http://${DC_DOMAIN}:$((DC_DOCKER_PORT-1))0
 
 You must start container before adding Drupal to it, use
-$ dc start ${DC_PROJ} dev
+$ dc up ${DC_PROJ} dev
+
 You can now add fresh drupal or pull from repository.
 $ dc drupal-7 ${DC_PROJ} dev
 $ dc git-clone ${DC_PROJ} dev
+
 Probably, if you used clone, you'll need mysql import, but
 keep in mind that SQL dump should be in ${DC_PROJ}/dev/databases/mysqldump.sql
 $ dc mysql-import ${DC_PROJ} mysqldump.sql
@@ -92,12 +94,16 @@ function dc_archive() {
 }
 
 # Delete project home directory
-function dc_delete() {
+function dc_remove() {
   # Brutally delte strucutre
-  echo -e "WARNING !!!"
-  echo -e "This is going to WIPE OUT project and their DEV/STAGE/PROD irrevocably!"
-  echo -e "Did you make a copy?"
-  echo -e "Did you archive and compressed it?"
+  echo -e "\033[31;5;97;101m
+    WARNING
+    ===========\033[0m
+
+  This is going to WIPE OUT project and their DEV/STAGE/PROD irrevocably!
+  Did you make a copy?
+  Did you archive and compressed it?
+"
   read -r -p "Are you ABOSLUTELY sure you want to wipe ${DC_PROJ} out? [y/n]" response
   case $response in
     [yY][eE][sS]|[yY]) 
@@ -151,7 +157,7 @@ db_host: mariadb
 ###
 
 # Start project docker in environment
-function dc_start() {
+function dc_up() {
   echo "Starting containers for ${DC_PROJ} in ${DC_ENV}"
   dcp up -d
 }
@@ -183,7 +189,7 @@ function dc_process() {
 }
 
 # Kill project docker in environment
-function dc_kill() {
+function dc_down() {
   echo "Killing containers for ${DC_PROJ} in ${DC_ENV}"
   dcp down
 }
@@ -364,9 +370,9 @@ case $DC_CMD in
         check_proj
         dc_archive
         ;;
-    d|delete)
+    rm|remove)
         check_proj
-        dc_delete
+        dc_remove
         ;;
 # Drupal commands
     d7|d8|drupal-7|drupal-8)
@@ -385,10 +391,10 @@ case $DC_CMD in
         dc_drush "$*"
         ;;
 # Docker commands
-    s|start)
+    u|up)
         check_proj
         check_env
-        dc_start
+        dc_up
         ;;
     r|restart)
         check_proj
@@ -404,10 +410,10 @@ case $DC_CMD in
     l|list)
         dc_list
         ;;
-    k|kill)
+    d|down)
         check_proj
         check_env
-        dc_kill
+        dc_down
         ;;
 # Git commnads
     gc|git-clone)
@@ -493,7 +499,7 @@ System
     Archive project, remove from active tree.
     $ dc archive myproj
 
-  d, delete
+  rm, remove
     delete whole project structure
     $ dc delete myproj
 
@@ -513,7 +519,7 @@ Drupal
 
 Docker
 ======
-  s, start
+  u, up
     Start project containers for environment.
     $ dc start myproj dev
 
@@ -521,7 +527,7 @@ Docker
     Restart project containers for environment.
     $ dc restart myproj prod
 
-  k, kill
+  d, down
     Kill project containers for environment.
     $ dc kill myproj stage
 
@@ -600,7 +606,7 @@ System
   m8, make8   Make the project by building directory structure and docker-compose.yml for three environments, dev, stage and prod.
   l, list     List all projects.
   a, archive  Archive project, remove from active tree.
-  d, delete   Delete whole project structure
+  rm, remove   Delete whole project structure
 
 Drupal
 ======
@@ -610,9 +616,9 @@ Drupal
 
 Docker
 ======
-  s, start     Start project containers for environment.
+  u, up        Start project containers for environment.
   r, restart   Restart project containers for environment.
-  k, kill      Kill project containers for environment.
+  d, down      Kill project containers for environment.
   ps, process  Gives status of the project containers for environment or all containers.
   st, status   Gives statistics of all containers.
 
@@ -633,6 +639,7 @@ MySQL
 
 Have a wish, suggestion?
 Mail me macmladen@gmail.com
+
 Carpe diem.
 "
         ;;
