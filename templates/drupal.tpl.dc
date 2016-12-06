@@ -15,13 +15,13 @@ services:
       - ./databases:/var/lib/mysql/databases
 #      - ./docker-runtime/mariadb-init:/docker-entrypoint-initdb.d # Place init .sql file(s) here.
 #    ports:
-#      - "__DC_PORT__6:3306"
+#      - "{{DC_PORT}}6:3306"
 
   php:
-    image: wodby/drupal-php:__DC_PHP__ # Allowed: 7.0, 5.6.
+    image: wodby/drupal-php:{{DC_PHP}} # Allowed: 7.0, 5.6.
     environment:
       PHP_SITE_NAME: dev
-      PHP_HOST_NAME: localhost:__DC_PORT__0
+      PHP_HOST_NAME: localhost:{{DC_PORT}}0
       PHP_DOCROOT: docroot # Relative path inside the /var/www/html/ directory.
       PHP_SENDMAIL_PATH: /usr/sbin/sendmail -t -i -S mailhog:1025
 #      PHP_XDEBUG_ENABLED: 1 # Set 1 to enable.
@@ -38,11 +38,15 @@ services:
       NGINX_SERVER_NAME: localhost
       NGINX_UPSTREAM_NAME: php
       NGINX_DOCROOT: docroot # Relative path inside the /var/www/html/ directory.
-      DRUPAL_VERSION: __DC_DRUPAL__ # Allowed: 7, 8.
+      DRUPAL_VERSION: {{DC_DRUPAL}} # Allowed: 7, 8.
+      VIRTUAL_HOST: {{DC_ENV}}.{{DC_PROJ}}.{{DC_DOMAIN}}
     volumes_from:
       - php
     ports:
-      - "__DC_PORT__0:80"
+      - "{{DC_PORT}}0:80"
+    networks:
+      - proxy_net
+      - default
 
   pma:
     image: phpmyadmin/phpmyadmin
@@ -53,15 +57,29 @@ services:
       PMA_PASSWORD: drupal
       PHP_UPLOAD_MAX_FILESIZE: 1G
       PHP_MAX_INPUT_VARS: 1G
+      VIRTUAL_HOST: pma.{{DC_PROJ}}.{{DC_DOMAIN}}
     volumes:
       - ./docker-runtime/metro:/www/themes/metro
     ports:
-     - "__DC_PORT__1:80"
+     - "{{DC_PORT}}1:80"
+    networks:
+      - proxy_net
+      - default
 
   mailhog:
     image: mailhog/mailhog
+    environment:
+      VIRTUAL_HOST: hog.{{DC_PROJ}}.{{DC_DOMAIN}}
+      VIRTUAL_PORT: 8025
     ports:
-      - "__DC_PORT__2:8025"
+      - "{{DC_PORT}}2:8025"
+    networks:
+      - proxy_net
+      - default
+
+networks:
+  proxy_net:
+    external: true
 
 #  redis:
 #    image: redis:3.2-alpine
@@ -72,14 +90,14 @@ services:
 #  memcached-admin:
 #    image: phynias/phpmemcachedadmin
 #    ports:
-#      - "__DC_PORT__7:80"
+#      - "{{DC_PORT}}7:80"
 
 #  solr:
 #    image: solr:5.5-alpine
 #    volumes:
 #      - ./docker-runtime/solr:/opt/solr/server/solr/mycores
 #    ports:
-#      - "__DC_PORT__3:8983"
+#      - "{{DC_PORT}}3:8983"
 
 #  varnish:
 #    image: wodby/drupal-varnish
@@ -92,6 +110,6 @@ services:
 #      VARNISH_MEMORY_SIZE: 256M
 #      VARNISH_STORAGE_SIZE: 1024M
 #    ports:
-#      - "__DC_PORT__4:6081" # HTTP Proxy
-#      - "__DC_PORT__5:6082" # Control terminal
+#      - "{{DC_PORT}}4:6081" # HTTP Proxy
+#      - "{{DC_PORT}}5:6082" # Control terminal
 

@@ -3,9 +3,13 @@
 # See where we are
 DC_CMD="$1"
 DC_PROJ="$2"
-DC_ENV="$3"
-DC_ARG="$4"
-DC_ALL_ARG="$@"
+DC_ARG="$3"
+# remove command project and environment to get rest of drush commands and arguments
+shift
+shift
+DC_ALL_ARG="$*"
+# We work only in dev, stage and prod are replicated dev
+DC_ENV="dev"
 
 DC_DIR=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
 DC_PROJ_DIR="/data/projects"
@@ -42,6 +46,13 @@ function dc_init() {
 function dc_make() {
   if [ $DC_CMD == "make8" ] || [ $DC_CMD == "m8" ]; then
     DC_DRUPAL="8"
+    DC_PHP="7.0"
+  fi
+  if [ $DC_ARG == "5" ]; then
+    DC_PHP="5.6"
+  fi
+  if [ $DC_ARG == "7" ]; then
+    DC_PHP="7.0"
   fi
   # Create directories in environments
   for key in "${DC_ENVIRONMENTS[@]}" ; do
@@ -50,9 +61,12 @@ function dc_make() {
     cp -a ${DC_DIR}/metro ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime/
     cp -a ${DC_DIR}/drush ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime/
     sed \
-      -e "s/__DC_PORT__/${DC_DOCKER_PORT}/g" \
-      -e "s/__DC_PHP__/${DC_PHP}/g" \
-      -e "s/__DC_DRUPAL__/${DC_DRUPAL}/g" \
+      -e "s/{{DC_PORT}}/${DC_DOCKER_PORT}/g" \
+      -e "s/{{DC_PHP}}/${DC_PHP}/g" \
+      -e "s/{{DC_DRUPAL}}/${DC_DRUPAL}/g" \
+      -e "s/{{DC_ENV}}/${key}/g" \
+      -e "s/{{DC_PROJ}}/${DC_PROJ}/g" \
+      -e "s/{{DC_DOMAIN}}/${DC_DOMAIN}/g" \
       ${DC_DIR}/templates/drupal.tpl.dc \
       > ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-compose.yml
     #echo "docker-compose.yml file created."
@@ -70,16 +84,19 @@ function dc_make() {
 Directories for project: ${DC_PROJ} created.
 
 You can access your new project at:
-Dev:   http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))0
-Stage: http://${DC_DOMAIN}:$((DC_DOCKER_PORT-2))0
-Prod:  http://${DC_DOMAIN}:$((DC_DOCKER_PORT-1))0
+Dev:         http://dev.${DC_PROJ}.${DC_DOMAIN}    or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))0
+phpMyAdmin:  http://pma.${DC_PROJ}.${DC_DOMAIN}    or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))1
+MailHog:     http://hog.${DC_PROJ}.${DC_DOMAIN}    or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))2
+
+Stage:       http://stage.${DC_PROJ}.${DC_DOMAIN}  or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-2))0
+Prod:        http://prod.${DC_PROJ}.${DC_DOMAIN}   or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-1))0
 
 You must start container before adding Drupal to it, use
-$ dc up ${DC_PROJ} dev
+$ dc up ${DC_PROJ}
 
 You can now add fresh drupal or pull from repository.
-$ dc drupal-7 ${DC_PROJ} dev
-$ dc git-clone ${DC_PROJ} dev
+$ dc drupal-7 ${DC_PROJ}
+$ dc git-clone ${DC_PROJ}
 
 Probably, if you used clone, you'll need mysql import, but
 keep in mind that SQL dump should be in ${DC_PROJ}/dev/databases/mysqldump.sql
@@ -97,10 +114,13 @@ function dc_archive() {
 function dc_remove() {
   # Brutally delte strucutre
   echo -e "\033[31;5;97;101m
-    WARNING
-    ===========\033[0m
 
-  This is going to WIPE OUT project and their DEV/STAGE/PROD irrevocably!
+    WARNING
+    ===========
+
+\033[0m
+
+  This is going to WIPE OUT \033[31;5;97;101m ${DC_PROJ} \033[0m and their DEV/STAGE/PROD irrevocably!
   Did you make a copy?
   Did you archive and compressed it?
 "
@@ -121,14 +141,14 @@ function dc_remove() {
 # Drupal functions
 ###
 
-# Run drush in project in environment
+# Run drush in project dev
 function dc_drush() {
   echo "Running drush for ${DC_PROJ} in ${DC_ENV}"
   # user 82 is www-data in php container and docker in our system
-  dcp exec --user 82 php drush @default.dev $@
+  dcp exec --user 82 php drush @default.dev $DC_ALL_ARG
 }
 
-# Create drupal-7 or drupal-8 in project in environment
+# Create drupal-7 or drupal-8 in project dev
 function dc_drupal() {
   case ${DC_CMD} in
       d7)
@@ -248,7 +268,6 @@ function dc_git_status() {
 # Just for testing
 function dc_test() {
     echo "Testing:"
-    check_php_run
 }
 
 
@@ -287,8 +306,14 @@ function dc_db_export() {
 
 # MySQL exec shell for the project in env
 function dc_db_shell() {
-  echo "Entering shell for ${DC_PROJ}_${DC_DATE}.sql in container ${DC_PROJ} for ${DC_ENV}"
+  echo "Entering shell in database container ${DC_PROJ} for ${DC_ENV}"
   docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh
+}
+
+# Gzip database and make it downloadable
+function dc_db_zip() {
+  echo "Gzipping database ${DC_ARG} in ${DC_PROJ} for ${DC_ENV}"
+  gzip -c ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/databases/${DC_ARG} > ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docroot/sites/default/files/${DC_ARG}.gz
 }
 
 
@@ -339,23 +364,12 @@ Usage:
   fi
 }
 
-# Check project environment argument
-function check_env() {
-  if [ -z "$DC_ENV" ] ; then
-    echo "
-We need a project environment (dev, stage, prod) to work on, please supply one.
 
-Usage:
-  dc command project dev|stage|prod
-"
-    exit 1
-  fi
-}
-
-
-###
-# Main loop
-###
+########################################
+#                                      #
+#            Main loop                 #
+#                                      #
+########################################
 
 case $DC_CMD in
 # System commands
@@ -377,28 +391,20 @@ case $DC_CMD in
 # Drupal commands
     d7|d8|drupal-7|drupal-8)
         check_proj
-        check_env
         check_php_run
         dc_drupal
         ;;
     dr|drush)
         check_proj
-        check_env
-        # remove command project and environment to get rest of drush commands and arguments
-        shift
-        shift
-        shift
-        dc_drush "$*"
+        dc_drush
         ;;
 # Docker commands
     u|up)
         check_proj
-        check_env
         dc_up
         ;;
     r|restart)
         check_proj
-        check_env
         dc_restart
         ;;
     st|stats)
@@ -412,56 +418,50 @@ case $DC_CMD in
         ;;
     d|down)
         check_proj
-        check_env
         dc_down
         ;;
 # Git commnads
     gc|git-clone)
         check_proj
-        check_env
         check_repo
         dc_git_clone
         ;;
     gco|git-checkout)
         check_proj
-        check_env
         dc_git_checkout
         ;;
     gba|git-branch-all)
         check_proj
-        check_env
         dc_git_branch_all
         ;;
     gp|git-pull)
         check_proj
-        check_env
         dc_git_pull
         ;;
     gst|git-status)
         check_proj
-        check_env
         dc_git_status
         ;;
 # MySQL
     dbl|db-list)
         check_proj
-        check_env
         dc_db_list
         ;;
     dbi|db-import)
         check_proj
-        check_env
         dc_db_import
         ;;
     dbe|db-export)
         check_proj
-        check_env
         dc_db_export
         ;;
     dbs|db-shell)
         check_proj
-        check_env
         dc_db_shell
+        ;;
+    dbz|db-zip)
+        check_proj
+        dc_db_zip
         ;;
 # Testing new things ;)
     t|test)
@@ -474,7 +474,7 @@ DC version 1.0
 (C) 2016 MacMladen @macmladen
 
 Usage:
-  dc command [project environment arguments]
+  dc command [project [arguments]]
 
 Commands:
 
@@ -487,9 +487,9 @@ System
   m, make
   m8, make8
     Make the project by building directory structure and docker-compose.yml for three environments, dev, stage and prod.
-    $ dc make myproj drupal7
-    $ dc make8 myproj drupal8
-    $ dc makew myproj wordpress
+    $ dc make myproj    # makes drupal7
+    $ dc make8 myproj   # makes drupal8
+    $ dc makew myproj   # makes wordpress
 
   l, list
     List all projects.
@@ -501,21 +501,19 @@ System
 
   rm, remove
     delete whole project structure
-    $ dc delete myproj
+    $ dc remove myproj
 
 Drupal
 ======
   d7, drupal-7
   d8, drupal-8
-    Install fresh drupal in project for environment.
-    $ dc drupal-7 myproj dev
-    $ dc drupal-8 myproj8 dev
+    Install fresh drupal in project dev environment.
+    $ dc drupal-7 myproj
+    $ dc drupal-8 myproj8
 
   dr, drush
-    Execute drush commands on project in environment.
+    Execute drush commands on project dev environment.
     $ dc drush myproj dl views
-    By design, it cannot handle multiple arguments after drush command.
-    If you need that, 'cd' to project directory and use 'drc' command.
 
 Docker
 ======
@@ -543,24 +541,24 @@ Docker
 Git
 ===
   gc, git-clone
-    git clone repository in project for environment.
-    $ dc git-clone myproj dev git@bitbucket.org:user/project.git
+    git clone repository in project dev environment.
+    $ dc git-clone myproj git@bitbucket.org:user/project.git
 
   gco, git-checkout
-    git checkout branch in project for environment.
-    $ dc git-checkout myproj dev master
+    git checkout branch in project dev environment.
+    $ dc git-checkout myproj master
 
   gba, git-branch-all
-    git show all branches in project for environment.
-    $ dc git-branch-all myproj dev
+    git show all branches in project dev environment.
+    $ dc git-branch-all myproj
 
   gp, git-pull
-    git pull latest code in project for environment.
-    $ dc git-pull myproj dev
+    git pull latest code in project dev environment.
+    $ dc git-pull myproj
 
   gst, git-status
-    git status of remote repository in project for environment.
-    $ dc git-status myproj dev
+    git status of remote repository in project dev environment.
+    $ dc git-status myproj
 
 MySQL
 =====
@@ -569,19 +567,25 @@ MySQL
     $ dc db-list
 
   dbi, db-import
-    Import database in project for environment.
-    $ dc db_import myproj dev myprojdump_20161118-0941.sql
+    Import database in project dev environment.
+    $ dc db-import myproj myprojdump_20161118-0941.sql
 
   dbe, db-export
     Export database from project in environment to databases directory.
-    $ dc db-export myproj dev
+    $ dc db-export myproj
 
   dbs, db-shell
     Enter shell in database container for project in environment.
-    $ dc db-shell myproj dev
+    $ dc db-shell myproj
+
+  dbz, db-zip
+    Zip database in project and send to drupal files for download.
+    $ dc db-zip myproj myprojdump_20161118-0941.sql
+    file is available at http://myproj.com/sites/default/files/myprojdump_20161118-0941.sql.gz
 
 Have a wish, suggestion?
 Mail me macmladen@gmail.com
+
 Carpe diem.
 "
         ;;
@@ -636,6 +640,7 @@ MySQL
   dbi, db-import  Import database in project for environment.
   dbe, db-export  Export database from project in environment to databases directory.
   dbs, db-shell   Enter shell in database container for project in environment.
+  dbz, db-zip     Zip database in project and send to drupal files for download.
 
 Have a wish, suggestion?
 Mail me macmladen@gmail.com
