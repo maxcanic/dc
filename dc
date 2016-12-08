@@ -48,10 +48,10 @@ function dc_make() {
     DC_DRUPAL="8"
     DC_PHP="7.0"
   fi
-  if [ $DC_ARG == "5" ]; then
+  if [ "${DC_ARG}" == "5" ]; then
     DC_PHP="5.6"
   fi
-  if [ $DC_ARG == "7" ]; then
+  if [ "${DC_ARG}" == "7" ]; then
     DC_PHP="7.0"
   fi
   # Create directories in environments
