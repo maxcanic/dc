@@ -1,0 +1,26 @@
+
+dc 0.5.0, 2016-12-08
+------------------------
+- Setting default PHP 5.6 for Drupal 7 and PHP 7.0 for Drupal 8 with override
+
+
+dc 0.4.0, 2016-12-06
+------------------------
+- Removed the need for environment (dev), we'll handle stage and prod as promote from dev (or branch)
+
+
+dc 0.3.0, 2016-11-30
+------------------------
+- Changed commands to even better align them with native docker for up, down to start and stop
+
+
+dc 0.2.0, 2016-11-23
+------------------------
+- Changed dc to run natively under docker user
+- Added shortcut to enter mariadb shell
+- Changed commands to align them with native docker
+
+dc 0.1.0, 2016-11-21
+------------------------
+- Initial release
+- contains all basic commands to create project, manage containers, git and database.
