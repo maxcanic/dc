@@ -1,42 +1,110 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# See where we are
+###-----------------------------------------------------------------------------
+#                 Variables, constants and environment
+###
+
+DC_VERSION="1.0.0-beta1"
+# Run only as 'docker'
+if [ ! ${USER} == "docker" ]; then
+    echo "We do not run as other user because of ownership and permissions issues."
+    exit 1
+fi
+
+# Get us OS version for OS specific behaviour
+case $(uname) in
+    Darwin)
+        DC_OS="Mac"
+        ;;
+    Linux)
+        DC_OS="Linux"
+        ;;
+    CYGWIN_NT)
+        DC_OS="Wndows"
+        ;;
+    *)
+        DC_OS="UNKNOWN"
+        ;;
+esac
+
+#-------------------------------- Arguments ------------------------------------
 DC_CMD="$1"
 DC_PROJ="$2"
 DC_ARG="$3"
-# remove command project and environment to get rest of drush commands and arguments
+# remove $command and $project to get rest of multiple arguments (drush, etc)
 shift
 shift
 DC_ALL_ARG="$*"
-# We work only in dev, stage and prod are replicated dev
-DC_ENV="dev"
+# All arguments preserved
 
-DC_DIR=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+#---------------------------- Global Constants --------------------------------
+# See where we are
+if [ "${DC_OS}" == "Mac" ]; then
+    DC_DIR=$(dirname $(readlink "${BASH_SOURCE[0]}"))
+else
+    DC_DIR=$(dirname $(readlink -f "${BASH_SOURCE[0]}"))
+fi
 DC_PROJ_DIR="/data/projects"
-DC_PORT_FILE="${DC_DIR}/dc.port"
 
 DC_DOMAIN="devbox21.com"
 DC_ENVIRONMENTS=("dev" "stage" "prod")
-DC_DOCKER_PORT=$(<"${DC_PORT_FILE}")
+# We work only in dev, stage and prod are replicated dev
+DC_ENV="dev"
 
 DC_PHP="5.6"
 DC_DRUPAL="7"
 
+# UI decoration
+# Console colors
+red='\033[0;91m'
+red_bg='\033[101m'
+green='\033[0;32m'
+green_bg='\033[42m'
+yellow='\033[1;33m'
+NC='\033[0m'
 
-###
-# Helper functions
+# Check which docker compose should we use:
+# - docker-compose.mci.yml if it exists as override to default
+# - docker-compose-yml if we are in charge
+DC_COMPOSE="${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.mci.yml"
+if [ ! -f "${DC_COMPOSE}" ]; then
+    DC_COMPOSE="${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml"
+fi
+
+
+###-----------------------------------------------------------------------------
+#                             Helper functions
 ###
 
-# Shortcut for code readability
+#------------------------------- UI helpers ------------------------------------
+# Echo in color
+# @param $1 string - Message to be printed
+echo-red () { echo -e "${red}$1${NC}"; }
+echo-green () { echo -e "${green}$1${NC}"; }
+echo-green-bg () { echo -e "${green_bg}$1${NC}"; }
+echo-yellow () { echo -e "${yellow}$1${NC}"; }
+
+# Exits dc if previous command exited with non-zero code
+# @param $1 string - Error message
+# @param $2 int    - Error code for exit
+# @return int      - Exit with error code
+if_failed ()
+{
+	if [ ! $? -eq 0 ]; then
+		echo-red "dc: ${1:-error executing last command}"
+		exit ${2:-1}
+	fi
+}
+
+#--------------------- Shortcut for code readability ---------------------------
 function dcp() {
-  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} "$@"
+  docker-compose -f ${DC_COMPOSE} -p ${DC_PROJ}${DC_ENV} "$@"
 }
 
 
+###-----------------------------------------------------------------------------
+#                             System functions
 ###
-# System functions
-###
-
 # Initialize the system
 function dc_init() {
   echo "Initializing, basically setting up /data/* directory structure -- NOT IMPLEMENTED YET."
@@ -61,7 +129,6 @@ function dc_make() {
     cp -a ${DC_DIR}/metro ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime/
     cp -a ${DC_DIR}/drush ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-runtime/
     sed \
-      -e "s/{{DC_PORT}}/${DC_DOCKER_PORT}/g" \
       -e "s/{{DC_PHP}}/${DC_PHP}/g" \
       -e "s/{{DC_DRUPAL}}/${DC_DRUPAL}/g" \
       -e "s/{{DC_ENV}}/${key}/g" \
@@ -69,38 +136,31 @@ function dc_make() {
       -e "s/{{DC_DOMAIN}}/${DC_DOMAIN}/g" \
       ${DC_DIR}/templates/drupal.tpl.dc \
       > ${DC_PROJ_DIR}/${DC_PROJ}/$key/docker-compose.yml
-    #echo "docker-compose.yml file created."
-    ((DC_DOCKER_PORT++))
+    echo "For '${DC_PROJ}' in '${key}' docker-compose.yml file created."
   done
-
-  # Write port for next project
-  echo ${DC_DOCKER_PORT} > "${DC_PORT_FILE}"
-
-  # Fix ownership for dc friendly
-  chown -R docker:docker ${DC_PROJ_DIR}/${DC_PROJ}
 
   # Report on created dockers
   echo "
 Directories for project: ${DC_PROJ} created.
 
 You can access your new project at:
-Dev:         http://dev.${DC_PROJ}.${DC_DOMAIN}    or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))0
-phpMyAdmin:  http://pma.${DC_PROJ}.${DC_DOMAIN}    or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))1
-MailHog:     http://hog.${DC_PROJ}.${DC_DOMAIN}    or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-3))2
+Dev:         http://dev.${DC_PROJ}.${DC_DOMAIN}
+phpMyAdmin:  http://pma.${DC_PROJ}.${DC_DOMAIN}
+MailHog:     http://hog.${DC_PROJ}.${DC_DOMAIN}
 
-Stage:       http://stage.${DC_PROJ}.${DC_DOMAIN}  or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-2))0
-Prod:        http://prod.${DC_PROJ}.${DC_DOMAIN}   or http://${DC_DOMAIN}:$((DC_DOCKER_PORT-1))0
+Stage:       http://stage.${DC_PROJ}.${DC_DOMAIN}
+Prod:        http://prod.${DC_PROJ}.${DC_DOMAIN}
 
 You must start container before adding Drupal to it, use
 $ dc up ${DC_PROJ}
 
 You can now add fresh drupal or pull from repository.
 $ dc drupal-7 ${DC_PROJ}
-$ dc git-clone ${DC_PROJ}
+$ dc git-clone ${DC_PROJ} {{git_URL}}
 
 Probably, if you used clone, you'll need mysql import, but
-keep in mind that SQL dump should be in ${DC_PROJ}/dev/databases/mysqldump.sql
-$ dc mysql-import ${DC_PROJ} mysqldump.sql
+keep in mind that SQL dump should be in ${DC_PROJ}/dev/databases/some-name_dump.sql
+$ dc db-import ${DC_PROJ} some-name_dump.sql
 "
 }
 
@@ -292,7 +352,7 @@ function dc_db_import() {
   #   This does not work because variable expansion eats double quotes
   # DC_SQL="\"mysql -udrupal -pdrupal drupal < /var/lib/mysql/databases/${DC_ARG}\""
   # dcp exec mariadb sh -c "${DC_SQL}"
-  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh -c "mysql -udrupal -pdrupal drupal < /var/lib/mysql/databases/${DC_ARG}"
+  docker-compose -f ${DC_COMPOSE} -p ${DC_PROJ}${DC_ENV} exec mariadb sh -c "mysql -udrupal -pdrupal drupal < /var/lib/mysql/databases/${DC_ARG}"
 }
 
 # MySQL export database for the project in env
@@ -301,13 +361,13 @@ function dc_db_export() {
   echo "Export database ${DC_PROJ}_${DC_DATE}.sql in ${DC_PROJ} for ${DC_ENV}"
   #   This does not work because variable expansion eats double quotes
   # dcp exec mariadb sh -c \"mysqldump -udrupal -pdrupal drupal > /var/lib/mysql/databases/${DC_PROJ}_${DC_DATE}.sql\"
-  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh -c "mysqldump -udrupal -pdrupal drupal > /var/lib/mysql/databases/${DC_PROJ}_${DC_DATE}.sql"
+  docker-compose -f ${DC_COMPOSE} -p ${DC_PROJ}${DC_ENV} exec mariadb sh -c "mysqldump -udrupal -pdrupal drupal > /var/lib/mysql/databases/${DC_PROJ}_${DC_DATE}.sql"
 }
 
 # MySQL exec shell for the project in env
 function dc_db_shell() {
   echo "Entering shell in database container ${DC_PROJ} for ${DC_ENV}"
-  docker-compose -f ${DC_PROJ_DIR}/${DC_PROJ}/${DC_ENV}/docker-compose.yml -p ${DC_PROJ}-${DC_ENV} exec mariadb sh
+  docker-compose -f ${DC_COMPOSE} -p ${DC_PROJ}${DC_ENV} exec mariadb sh
 }
 
 # Gzip database and make it downloadable
